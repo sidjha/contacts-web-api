@@ -17,15 +17,15 @@ def index():
 
 
 """ 
-  * Resource URL: https://favor8api.herokuapp.com/account/register
-  * Type: POST
-  * Requires Authentication? No
-  * Response formats: JSON
-  * Parameters
-   * name (required): The full name of the user
-   * user_key (required): A unique identification key, such as email address or phone number.
-  * Example request: 
-   * POST http://favor8api.heroku.com/account/register?name=Siddharth%20Jha&user_key=9812345678
+  Resource URL: https://favor8api.herokuapp.com/account/register
+  Type: POST
+  Requires Authentication? No
+  Response formats: JSON
+  Parameters
+   name (required): The full name of the user
+   user_key (required): A unique identification key, such as email address or phone number.
+  Example request: 
+   POST https://favor8api.herokuapp.com/account/register?name=Siddharth%20Jha&user_key=9812345678
 """
 @app.route("/account/register", methods=["POST"])
 def account_register():
