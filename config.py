@@ -1,0 +1,3 @@
+# Default configuration
+PARSE_APP_ID = 'cTMwjWCB2ijqCB0ZIad5URdKgJx56SQKOXBKxhoP'
+PARSE_RESTAPI_KEY = 'jKDOEVAa5me98CoiKV0Dllx1yFDB789b4e0nTss3'
