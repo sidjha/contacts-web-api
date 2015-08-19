@@ -1,1 +1,1 @@
-web: python contacts.py
+web: gunicorn contacts:app
