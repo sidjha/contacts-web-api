@@ -17,7 +17,7 @@ def index():
 
 
 """ 
-  * Resource URL: https://favor8api.heroku.com/account/register
+  * Resource URL: https://favor8api.herokuapp.com/account/register
   * Type: POST
   * Requires Authentication? No
   * Response formats: JSON
@@ -46,7 +46,6 @@ def account_register():
 			return json.dumps({"error": error}), 400
 
 		try:
-			import pdb; pdb.set_trace()
 			user = User.Query.get(key=user_key)
 			error = "ERROR: User already exists."
 			print_error(error)
