@@ -107,11 +107,11 @@ def sms_verify():
 			unverified_user = UnverifiedUser.Query.get(phoneNum=phone)
 			print unverified_user
 			#import pdb; pdb.set_trace()
-			unverified_user.ver_code = code
+			unverified_user.ver_code = int(code)
 			unverified_user.save()
 			print "Saved phone number successfully."
 		except QueryResourceDoesNotExist:
-			new_unverified_user = UnverifiedUser(phoneNum=phone, country="", ver_code=code)
+			new_unverified_user = UnverifiedUser(phoneNum=phone, country="", ver_code=int(code))
 			new_unverified_user.save()
 
 		sent = send_sms(code, phone)
@@ -174,9 +174,24 @@ def check_ver_code():
 
 
 def generate_code(phone_num):
-	code = random.randint(100000,999999)
+	code = str(random.randint(100000,999999))
+
 	print "Verification code: %s" % code
-	return code
+
+	try:
+		from postmark import PMMail
+		message = PMMail(api_key = app.config["POSTMARK_API_TOKEN"],
+		                 subject = "Verification Code from Favor8",
+		                 sender = "sid@mesh8.co",
+		                 to = "sid@mesh8.co,pankaj.xcode@gmail.com",
+		                 text_body = "Your Favor8 verification code is %s" % code,
+		                 tag = "favor8")
+
+		message.send()
+		return code
+	except:
+		return "000001"
+	
 
 
 def send_sms(code, phone_num):
