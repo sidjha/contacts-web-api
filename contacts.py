@@ -136,7 +136,7 @@ def sms_verify():
    submitted_code (required): The code to verify. e.g. 434512
    phoneNum (required): The phone number associated with the code e.g. +14161234567
   Example request:
-   GET https://favor8api.herokuapp.com/account/code-verify?submitted_code=434512&phone=+14161234567
+   GET https://favor8api.herokuapp.com/account/code-verify?submitted_code=434512&phoneNum=+14161234567
   Example response:
    {"match": "True"}
 """
