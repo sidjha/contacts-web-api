@@ -1,10 +1,13 @@
 from flask import Flask, render_template, request, json
+import os, re, binascii, gzip, base64, hmac, hashlib, math, random
 
 from parse_rest.datatypes import Object
 from parse_rest.query import QueryResourceDoesNotExist
 from parse_rest.connection import register
 
-import os, re, binascii, gzip, base64, hmac, hashlib, math
+import twilio
+from twilio.rest import TwilioRestClient
+
 import boto
 
 app = Flask(__name__)
@@ -72,6 +75,123 @@ def account_register():
 
 	else:
 		return only_post_supported()
+
+
+"""
+  Resource URL: https://favor8api.herokuapp.com/account/sms-verify
+  Type: POST
+  Requires Authentication? No
+  Response formats: JSON
+  Parameters
+   phone (required): The phone number to verify. e.g. +14161234567
+  Example request:
+   POST https://favor8api.herokuapp.com/account/sms-verify?phone=+14161234567
+  Example response:
+   {"code": "444213", "phone":"+14161234567"}
+"""
+@app.route("/account/sms-verify", methods=["POST"])
+def sms_verify():
+	if request.method == "POST":
+		phone = ""
+		# TODO: Get country from request
+		if "phone" in request.form:
+			phone = request.form["phone"]
+		else:
+			error = "ERROR: Incomplete arguments. phone required."
+			print_error(error)
+			return json.dumps({"error": error}), 400
+
+		code = generate_code(phone)
+
+		try:
+			unverified_user = UnverifiedUser.Query.get(phoneNum=phone)
+			print unverified_user
+			#import pdb; pdb.set_trace()
+			unverified_user.ver_code = code
+			unverified_user.save()
+			print "Saved phone number successfully."
+		except QueryResourceDoesNotExist:
+			new_unverified_user = UnverifiedUser(phoneNum=phone, country="", ver_code=code)
+			new_unverified_user.save()
+
+		sent = send_sms(code, phone)
+
+		if sent == True:
+			verification_code = {}
+			verification_code["code"] = code
+			verification_code["phone"] = phone
+			return json.dumps({"code": code, "phone": phone}), 200
+		else:
+			error = "ERROR: Verification SMS could not be sent"
+			print_error(error)
+			return json.dumps({"error": error}), 500
+
+
+"""
+  Resource URL: https://favor8api.herokuapp.com/account/code-verify
+  Type: GET
+  Requires Authentication? No
+  Response formats: JSON
+  Parameters
+   submitted_code (required): The code to verify. e.g. 434512
+   phoneNum (required): The phone number associated with the code e.g. +14161234567
+  Example request:
+   GET https://favor8api.herokuapp.com/account/code-verify?submitted_code=434512&phone=+14161234567
+  Example response:
+   {"match": "True"}
+"""
+@app.route("/account/code-verify", methods=["GET"])
+def check_ver_code():
+	submitted_code = ""
+	phone = ""
+
+	try:
+		submitted_code = request.args.get("submitted_code")
+		phone = request.args.get("phoneNum")
+	except Exception as e:
+		error = "ERROR: Incomplete arguments. phone required."
+		print_error(error)
+		return json.dumps({"error": error}), 400
+
+	try:
+		unverified_user = UnverifiedUser.Query.get(phoneNum=phone)
+		actual_code = str(unverified_user.ver_code)
+		if actual_code == submitted_code:
+			resp = {}
+			resp["match"] = "True"
+			# TODO: also append phone # to response
+			return json.dumps({"match":"True"}), 200
+		else:
+			print "codes don't match"
+			resp = {}
+			resp['match'] = "False"
+			return json.dumps({"match": "False"}), 400
+
+	except QueryResourceDoesNotExist:
+		error = "ERROR: Couldn't find unverified user with that phone"
+		print_error(error)
+		return json.dumps({"error": error}), 400
+
+
+def generate_code(phone_num):
+	code = random.randint(100000,999999)
+	print "Verification code: %s" % code
+	return code
+
+
+def send_sms(code, phone_num):
+	sms_body = "Hey there, your verification code is %s" % code
+	sent = False
+
+	try:
+		client = TwilioRestClient(app.config["TWILIO_TEST_ACCOUNT_SID"], app.config["TWILIO_TEST_AUTH_TOKEN"])
+		message = client.messages.create(body=sms_body,to=phone_num,from_=app.config["TWILIO_TEST_FROM_NUM"])
+		print "Sent SMS to %s" % phone_num
+		print "SMS_contents: %s" % sms_body
+		return True
+
+	except twilio.TwilioRestException as e:
+		return False
 
 
 """ 
@@ -239,6 +359,9 @@ def show_friendship():
 # Classes
 
 class User(Object):
+	pass
+
+class UnverifiedUser(Object):
 	pass
 
 
