@@ -424,13 +424,21 @@ def get_card(object_id):
 
 	user_dict = {}
 
-	user_dict['name'] = user.name
+	try:
+		user_dict['name'] = user.name
+	except:
+		user_dict['name'] = ""
+		
 	try:
 		user_dict['profile_img'] = user.profile_img
 	except:
-		user_dict[''] = ""
+		user_dict['profile_img'] = ""
 
-	user_dict['accounts'] = user.accounts
+	try:
+		user_dict['accounts'] = user.accounts
+	except:
+		user_dict['accounts'] = {}
+
 	try:
 		user_dict['status'] = user.status
 	except:
