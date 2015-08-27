@@ -172,7 +172,7 @@ def check_ver_code():
 		new_user = User()
 		new_user.phone = phone
 		new_user.save()
-		return json.dumps({"match":"True"}), 200
+		return json.dumps({"match":"True", "id_str": new_user.objectId}), 200
 	except:
 		error = "ERROR: Couldn't save the user"
 		print_error(error)
@@ -437,27 +437,15 @@ def get_card(object_id):
 
 # Stubs
 
-@app.route("/cards/update_links", methods=["POST"])
-def update_links():
-	pass
-
 
 @app.route("/cards/show/id", methods=["GET"])
 def show_card():
 	pass
 
 
-@app.route("/cards/nearby", methods=["GET"])
-def show_nearby_cards():
-	pass
-
-
 @app.route("/friends/list", methods=["GET"])
 def fraend_list():
 	pass
-
-
-
 
 
 @app.route("/friendships/update", methods=["POST"])
