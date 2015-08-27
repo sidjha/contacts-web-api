@@ -411,7 +411,11 @@ def create_friendship():
 """ Returns a list of ids of the user's friends"""
 def friend_list(a_user):
 	user = User.Query.get(objectId=a_user)
-	return user.friends
+	try:
+		friends = user.friends
+		return friends
+	except Exception as e:
+		return []
 
 
 """ Returns a user """
