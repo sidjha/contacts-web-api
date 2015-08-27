@@ -159,18 +159,24 @@ def check_ver_code():
 		if actual_code == submitted_code:
 			resp = {}
 			resp["match"] = "True"
-			# TODO: also append phone # to response
-			return json.dumps({"match":"True"}), 200
 		else:
-			print "codes don't match"
 			resp = {}
-			resp['match'] = "False"
+			resp["match"] = "False"
 			return json.dumps({"match": "False"}), 400
-
 	except QueryResourceDoesNotExist:
 		error = "ERROR: Couldn't find unverified user with that phone"
 		print_error(error)
 		return json.dumps({"error": error}), 400
+
+	try:
+		new_user = User()
+		new_user.phone = phone
+		new_user.save()
+		return json.dumps({"match":"True"}), 200
+	except:
+		error = "ERROR: Couldn't save the user"
+		print_error(error)
+		return json.dumps({"error": error}), 500
 
 
 def generate_code(phone_num):
@@ -303,35 +309,136 @@ def update_card():
 		return only_post_supported()
 
 
-# Stubs
-@app.route("/cards/update_status", methods=["POST"])
-def account_update_status():
+""" 
+  Resource URL: https://favor8api.herokuapp.com/cards/my_stack
+  Type: POST
+  Requires Authentication? Yes
+  Response formats: JSON
+  Parameters
+   id_str (required): ObjectId of the user obtained at registration. E.g. h2dJrEjKWJ
+  Example request: 
+   POST https://favor8api.herokuapp.com/cards/my_stack?id_str=h2dJrEjkWJ
+  Example response:
+   [{"id_str": "g534fb4fu7", "name": "Mark Zuckerberg", "user_key": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
+    "accounts":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}, {"id_str": "jb33kj5jm5", "name": "Sherlock Holmes", "user_key": "+14429327790", "profile_img": "http://s3.amazonaws.com/23e2223de6d/j6.jpg", 
+    "accounts":{"twitter": "sherlock", "facebook": "sherlock.holmes"}, "status":"Out at a crime scene with Watson"}, {"id_str": "g616gb9jp9", "name": "Kim Kardashian", "user_key": "+14154439344", "profile_img": "http://s3.amazonaws.com/g616gb9jp9/n88.jpg", 
+    "accounts":{"kik": "kim", "twitter": "kim_kardashian", "instagram": "kimkardashian"}, "status":"At a photoshoot"}]
+"""
+@app.route("/cards/my_stack", methods=["GET"])
+def my_stack():
+	id_str = ""
+	user = None
+
+	try:
+		id_str = request.args.get("id_str")
+	except Exception as e:
+		error = "ERROR: Incomplete arguments. id_str required."
+		print_error(error)
+		return json.dumps({"error": error}), 400
+	
+	try:
+		user = User.Query.get(objectId=id_str)
+	except Exception as e:
+		error = "ERROR: Invalid user. Please check id_str."
+		print_error(error)
+		return json.dumps({"error": error}), 400
+
+	friends = friend_list(id_str)
+
+	card_stack_all_friends = []
+	card_stack_all_friends.append(get_card(id_str))
+
+	for friend in friends:
+		card_stack_all_friends.append(get_card(friend))
+
+	return json.dumps({"my_stack": card_stack_all_friends}), 200
+
+
+""" 
+  Resource URL: https://favor8api.herokuapp.com/friendships/create
+  Type: POST
+  Requires Authentication? Yes
+  Response formats: JSON
+  Parameters
+   user1_id (required): ObjectId of the user who sent the friend request. E.g. h2dJrEjKWJ
+   user2_id (required): ObjectId of the user who is being added. E.g. g534fb4fu7
+  Example request: 
+   POST https://favor8api.herokuapp.com/friendships/create?id_str=h2dJrEjkWJ
+  Example response:
+   {["success": "True", "user1": "h2dJrEjkWJ", "user2": "g534fb4fu7"]}
+"""
+@app.route("/friendships/create", methods=["POST"])
+def create_friendship():
 	if request.method == "POST":
-		user = None
-		if "user_object_id" in request.form:
+		if "user1_id" in request.form and "user2_id" in request.form:
 			try:
-				user = User.query.get(objectId=request.form["user_object_id"])
+				user1 = User.Query.get(objectId=request.form["user1_id"])
+				user2 = User.Query.get(objectId=request.form["user2_id"])
 			except Exception as e:
-				return user_does_not_exist()
+				error = "ERROR: Invalid user."
+				print_error(error)
+				return json.dumps({"error": error}), 400
+
 			try:
-				if "status" in request.form:
-					user.status = request.form["status"]
-					# TODO: validation
-				return json.dumps({"successMsg": "Status successfully updated"}), 200
+				user1_friends = user1.friends
+				user1_friends.append(user2.objectId)
+				user1.friends = user1_friends
+			except:
+				user1.friends = [user2.objectId]
+
+			try:
+				user2_friends = user2.friends
+				user2_friends.append(user1.objectId)
+				user2.friends = user2_friends
+			except:
+				user2.friends = [user1.objectId]
+
+			try:
+				user1.save()
 			except Exception as e:
-				error = "ERROR: Status could not be updated"
+				error = "ERROR: The new friendship could not be saved"
 				print_error(error)
 				return json.dumps({"error": error}), 500
-	else:
-		return only_post_supported()
+
+			try:
+				user2.save()
+				return json.dumps({"success": "True", "user1": user1.objectId, "user2": user2.objectId}), 200
+			except Exception as e:
+				error = "ERROR: The new friendship could not be saved"
+				print_error(error)
+				return json.dumps({"error": error}), 500
+				
+
+""" Returns a list of ids of the user's friends"""
+def friend_list(a_user):
+	user = User.Query.get(objectId=a_user)
+	return user.friends
+
+
+""" Returns a user """
+def get_card(object_id):
+	user = User.Query.get(objectId=object_id)
+
+	user_dict = {}
+
+	user_dict['name'] = user.name
+	try:
+		user_dict['profile_img'] = user.profile_img
+	except:
+		user_dict[''] = ""
+
+	user_dict['accounts'] = user.accounts
+	try:
+		user_dict['status'] = user.status
+	except:
+		user_dict['status'] = ""
+
+	return user_dict
+
+# Stubs
 
 @app.route("/cards/update_links", methods=["POST"])
 def update_links():
-	pass
-
-
-@app.route("/cards/my_stack", methods=["GET"])
-def my_stack():
 	pass
 
 
@@ -346,13 +453,11 @@ def show_nearby_cards():
 
 
 @app.route("/friends/list", methods=["GET"])
-def friend_list():
+def fraend_list():
 	pass
 
 
-@app.route("/friendships/create", methods=["POST"])
-def create_friendship():
-	pass
+
 
 
 @app.route("/friendships/update", methods=["POST"])
