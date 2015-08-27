@@ -298,7 +298,6 @@ def update_card():
 				user.accounts = accounts
 
 			try:
-				import pdb; pdb.set_trace()
 				user.save()
 				return json.dumps({"id_str":user.objectId, "name": user.name, "profile_img": profile_img, "accounts": accounts, "status": status}), 200
 			except Exception as e:
