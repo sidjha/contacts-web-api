@@ -189,7 +189,7 @@ def generate_code(phone_num):
 		message = PMMail(api_key = app.config["POSTMARK_API_TOKEN"],
 		                 subject = "Verification Code from Favor8",
 		                 sender = "sid@mesh8.co",
-		                 to = "sid@mesh8.co,pankaj.xcode@gmail.com",
+		                 to = "sid@mesh8.co",
 		                 text_body = "Your Favor8 verification code is %s" % code,
 		                 tag = "favor8")
 
