@@ -293,27 +293,28 @@ def api_update_user():
 	   data: A dictionary containing user data.
 	   	profile_img: A base64-encoded image representing user's profile picture. String.
 	   	name: The full name of the user. String. E.g. Johnny Cash
-	   	accounts: A dictionary with social accounts of the user. Dictionary. E.g. {"WhatsApp":"+919812345678", "Kik": "john9"}
+	   	social_links: A dictionary with social accounts of the user. Dictionary. E.g. {"WhatsApp":"+919812345678", "Kik": "john9"}
 	   	status: A short status message. String. E.g. Just arrived in Mumbai.
 	   	email: An email. String.
 	   	phone: Phone #. String.
 	  Example response:
 	   {"error": "Some of the data could not be saved.", "user": {"user_id": 5, "username": "johnny" "name": "Johnny Cash", "phone": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
-	    "accounts":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}}
+	    "social_links":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}}
 	"""
 	if not request.json or not dict_contains_fields(request.json, ["data", "auth_token"]):
 		abort(400, "Missing required parameters.")
 
 	auth_token = request.json["auth_token"]
 	data = request.json["data"]
-	# TODO: validate auth token
-
+	
 	user = None
-
 	try:
 		user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
 	except:
 		abort(400, "User not found")
+
+	if user.auth_token != auth_token:
+		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 	
 	error = ""
 
@@ -322,7 +323,7 @@ def api_update_user():
 		user.name = name
 	if "profile_img" in data:
 		profile_img_base64 = data["profile_img"]
-		try:
+		"""
 			img_base64_data = re.search("base64,(.*)", profile_img_base64)
 			decoded_img = img_base64_data.group(1)
 
@@ -350,19 +351,22 @@ def api_update_user():
 		except Exception as e:
 			error = "Something went wrong in saving profile image to server.."
 			print_error(error)
+		"""
 
 	if "status" in data:
 		status = data["status"]
 		user.status = status
-	if "accounts" in data:
-		accounts = json.loads(data["accounts"])
-		user.accounts = accounts
+	if "social_links" in data:
+		social_links = data["social_links"]
+		user.social_links = social_links
 	if "email" in data:
 		email = data["email"]
 		user.email = email
+		# TODO: add email verification
 	if "phone" in data:
 		phone = data["phone"]
 		user.phone = phone
+		# TODO: add phone verification
 	try:
 		user.save()
 		return jsonify({"errors": error, "user": user_card(user, return_friends=False)}), 200
@@ -401,15 +405,19 @@ def api_delete_user():
 	# Remove this user from their friends' friend lists
 	# TODO: update the Friendships table
 	# TODO: error checking. need to run a daemon through users to ensure all friends exist.
-	for friend in user.friends:
-		try:
-			user_f = User.Query.get(user_id=friend)
-			user_f_friends = user_f.friends
-			user_f_friends.remove(user_id)
-			user_f.friends = user_f_friends
-			user_f.save()
-		except:
-			pass
+	try:
+		friends = user.friends 
+		for friend in user.friends:
+			try:
+				user_f = User.Query.get(user_id=friend)
+				user_f_friends = user_f.friends
+				user_f_friends.remove(user_id)
+				user_f.friends = user_f_friends
+				user_f.save()
+			except:
+				pass
+	except AttributeError:
+		pass
 	
 	try:
 		user.delete()
@@ -642,6 +650,9 @@ class User(Object):
 	pass
 
 class UnverifiedUser(Object):
+	pass
+
+class UserCount(Object):
 	pass
 
 # Helpers
