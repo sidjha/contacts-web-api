@@ -1,9 +1,13 @@
 from flask import Flask, render_template, request, json, jsonify, make_response, abort
+#from flask.ext.httpauth import HTTPBasicAuth
 import os, re, binascii, gzip, base64, hmac, hashlib, math, random
 
 from parse_rest.datatypes import Object
 from parse_rest.query import QueryResourceDoesNotExist
 from parse_rest.connection import register
+
+from itsdangerous import (TimedJSONWebSignatureSerializer as Serializer, BadSignature, SignatureExpired)
+from passlib.apps import custom_app_context as pwd_context
 
 import twilio
 from twilio.rest import TwilioRestClient
@@ -17,13 +21,14 @@ app.config["DEBUG"] = True
 
 register(app.config["PARSE_APP_ID"], app.config["PARSE_RESTAPI_KEY"])
 
+#auth = HTTPBasicAuth()
 
 @app.errorhandler(400)
 def bad_request(error):
 	return make_response(jsonify({"error": error.description}), 400)
 
 @app.errorhandler(401)
-def internal_server(error):
+def unauthorized_401(error):
 	return make_response(jsonify({"error": error.description}), 401)
 
 @app.errorhandler(404)
@@ -38,6 +43,11 @@ def not_allowed(error):
 def internal_server(error):
 	return make_response(jsonify({"error": error.description}), 500)
 
+"""
+@auth.error_handler
+def unauthorized():
+	return make_response(jsonify({"error": "Unauthorized Access"}), 401)
+"""
 
 @app.route("/")
 def index():
@@ -148,7 +158,6 @@ def api_users_create():
 	if not request.json or not dict_contains_fields(request.json, ["username", "password"]):
 		abort(400, "Missing parameters.")
 	username = request.json["username"]
-	# TODO: hash password
 	password = request.json["password"]
 
 	try:
@@ -161,8 +170,8 @@ def api_users_create():
 	try:
 		new_user_id = User.Query.all().count() + 1
 		auth_token = generate_auth_token(new_user_id)
-		user = User(username=username, password=password, auth_token=auth_token, user_id=new_user_id)
-		print "New user created. %s, %s" % (username, user)
+		user = User(username=username, auth_token=auth_token, user_id=new_user_id)
+		user.password = user.hash_password(password)
 		user.save()
 	except Exception as e:
 		errmsg = "New user could not be saved."
@@ -173,7 +182,7 @@ def api_users_create():
 		user_for_analytics = {}
 		user_for_analytics["username"] = user.username
 		user_for_analytics["user_id"] = user.user_id
-		user_for_analytics["via"] = "username/password"
+		user_for_analytics["via"] = "normal"
 		analytics.new_user_signed_up(user_for_analytics)
 	except:
 		pass
@@ -220,7 +229,7 @@ def api_user_login():
 		print_error("That user does not exist.")
 		abort(404, "That user does not exist.")
 
-	if user.password != password:
+	if not user.verify_password(password):
 		abort(401, "Incorrect password.")
 
 	auth_token = generate_auth_token(user.user_id)
@@ -692,7 +701,12 @@ def api_friends_ids():
 
 # Classes
 class User(Object):
-	pass
+	def hash_password(self, password):
+		self.password_hash = pwd_context.encrypt(password)
+		print self.password_hash
+	def verify_password(self, password):
+		return pwd_context.verify(password, self.password_hash)
+
 
 class UnverifiedUser(Object):
 	pass
@@ -729,6 +743,9 @@ def generate_auth_token(user_id):
 	# TODO: Generate better auth tokens
 	r = str(random.randint(100000,999999))
 	return "%s-abcdefg%s" % (user_id, r)
+
+
+
 
 def decode_id_from_auth_token(auth_token):
 	# TODO: update for production-ready auth tokens
