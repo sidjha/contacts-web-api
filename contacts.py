@@ -393,13 +393,15 @@ def api_delete_user():
 		abort(400, "Missing required parameters")
 
 	auth_token = request.json["auth_token"]
-	# TODO: validate auth token
 
 	user = None
 	try:
 		user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
 	except:
 		abort(400, "User not found")
+
+	if user.auth_token != auth_token:
+		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	user_id = user.user_id
 	# Remove this user from their friends' friend lists
@@ -445,12 +447,15 @@ def api_send_friend_request():
 
 	target_user_id = request.json["target_user_id"]
 	auth_token = request.json["auth_token"]
-	# TODO: validate auth token
+
 	try:
 		user1 = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
 		user2 = User.Query.get(user_id=target_user_id)
 	except Exception as e:
 		abort(400, "User not found.")
+
+	if user1.auth_token != auth_token:
+		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	try:
 		outgoing = user1.outgoing_requests
@@ -493,13 +498,16 @@ def api_create_friendship():
 
 	incoming_user_id = request.json["incoming_user_id"]
 	auth_token = request.json["auth_token"]
-	# TODO: validate auth token
+
 
 	try:
 		user1 = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
 		user2 = User.Query.get(user_id=incoming_user_id)
 	except Exception as e:
 		abort(400, "User not found.")
+
+	if user1.auth_token != auth_token:
+		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	# Check if there was a corresponding friend request
 	try:
@@ -567,13 +575,15 @@ def api_delete_friendship():
 
 	target_user_id = request.json["target_user_id"]
 	auth_token = request.json["auth_token"]
-	# TODO: validate auth token
 
 	try:
 		user1 = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
 		user2 = User.Query.get(user_id=target_user_id)
 	except Exception as e:
 		abort(400, "User not found.")
+
+	if user1.auth_token != auth_token:
+		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	# Check if this friendship exists
 	try:
@@ -622,12 +632,14 @@ def api_friends_list():
 		abort(400, "Missing parameters")
 
 	auth_token = request.json["auth_token"]
-	# TODO: validate auth token
 
 	try:
 		auth_user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
 	except:
 		abort(400, "User not found.")
+
+	if auth_user.auth_token != auth_token:
+		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	user_id = auth_user.user_id
 	friend_ids = friend_list(user_id)
@@ -659,12 +671,15 @@ def api_friends_ids():
 		abort(400, "Missing parameters")
 
 	auth_token = request.json["auth_token"]
-	# TODO: validate auth token
+	
 
 	try:
 		auth_user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
 	except:
 		abort(400, "User not found.")
+
+	if auth_user.auth_token != auth_token:
+		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	user_id = auth_user.user_id
 	friend_ids = friend_list(user_id)
@@ -683,9 +698,9 @@ class UserCount(Object):
 	pass
 
 # Helpers
-def friend_list(a_user):
+def friend_list(user_id):
 	'''Returns a list of ids of the user's friends'''
-	user = User.Query.get(user_id=a_user.user_id)
+	user = User.Query.get(user_id=user_id)
 	try:
 		friends = user.friends
 		return friends
