@@ -452,13 +452,19 @@ def api_send_friend_request():
 	except Exception as e:
 		abort(400, "User not found.")
 
-	outgoing = user1.outgoing_requests
-	outgoing.append(user2.user_id)
-	user1.outgoing_requests = outgoing
+	try:
+		outgoing = user1.outgoing_requests
+		outgoing.append(user2.user_id)
+		user1.outgoing_requests = outgoing
+	except:
+		user1.outgoing_requests = [user2.user_id]
 
-	incoming = user2.incoming_requests
-	incoming.append(user1.user_id)
-	user2.incoming_requests = incoming
+	try:
+		incoming = user2.incoming_requests
+		incoming.append(user1.user_id)
+		user2.incoming_requests = incoming
+	except:
+		user2.incoming_requests = [user1.user_id]
 
 	try:
 		user1.save()
@@ -495,6 +501,15 @@ def api_create_friendship():
 	except Exception as e:
 		abort(400, "User not found.")
 
+	# Check if there was a corresponding friend request
+	try:
+		if user2.user_id not in user1.incoming_requests:
+			abort(400, "Invalid parameters.")
+	# NOTE: this AttributeError catch isn't necessary is User table is already set up with these fields
+	except AttributeError: # will be thrown when authenticating user has never had an incoming request
+		abort(400, "Invalid parameters")
+
+	# Add incoming user to authenticating user's friends
 	try:
 		user1_friends = user1.friends
 		user1_friends.append(user2.user_id)
@@ -502,14 +517,18 @@ def api_create_friendship():
 	except:
 		user1.friends = [user2.user_id]
 
+	# Update incoming and outgoing requests
 	try:
+		# Remove incoming user from authenticating user's incoming requests
 		user1_incoming = user1.incoming_requests
 		user1_incoming.remove(user2.user_id)
+		# Remove authenticating user from incoming user's outgoing requests
 		user2_outgoing = user2.outgoing_requests
 		user2_outgoing.remove(user1.user_id)
 	except:
 		abort(400, "Friend request has expired.")
 
+	# Add authenticating user to incoming user's friends
 	try:
 		user2_friends = user2.friends
 		user2_friends.append(user1.user_id)
@@ -555,6 +574,14 @@ def api_delete_friendship():
 		user2 = User.Query.get(user_id=target_user_id)
 	except Exception as e:
 		abort(400, "User not found.")
+
+	# Check if this friendship exists
+	try:
+		if user2.user_id not in user1.friends:
+			abort(400, "Invalid parameters.")
+	# NOTE: this AttributeError catch isn't necessary is User table is already set up with these fields
+	except AttributeError: # will be thrown when authenticating user has never had any friends
+		abort(400, "Invalid parameters.")
 
 	try:
 		user1_friends = user1.friends
@@ -667,7 +694,7 @@ def friend_list(a_user):
 
 def user_card(user, return_friends=True):
 	user_card = {}
-	protected_fields = ["objectId", "auth_token", "_created_at", "_updated_at", "password"]
+	protected_fields = ["objectId", "auth_token", "_created_at", "_updated_at", "password", "incoming_requests", "outgoing_requests"]
 	if not return_friends: # so we don't return friends if return_friends=False
 		protected_fields.append("friends")
 	for field in user.__dict__:
