@@ -1,5 +1,5 @@
-from flask import Flask, render_template, request, json, jsonify, make_response, abort
-#from flask.ext.httpauth import HTTPBasicAuth
+from flask import Flask, render_template, request, json, jsonify, make_response, abort, g
+from flask.ext.httpauth import HTTPBasicAuth
 import os, re, binascii, gzip, base64, hmac, hashlib, math, random
 
 from parse_rest.datatypes import Object
@@ -21,7 +21,7 @@ app.config["DEBUG"] = True
 
 register(app.config["PARSE_APP_ID"], app.config["PARSE_RESTAPI_KEY"])
 
-#auth = HTTPBasicAuth()
+auth = HTTPBasicAuth()
 
 @app.errorhandler(400)
 def bad_request(error):
@@ -43,15 +43,30 @@ def not_allowed(error):
 def internal_server(error):
 	return make_response(jsonify({"error": error.description}), 500)
 
-"""
 @auth.error_handler
 def unauthorized():
-	return make_response(jsonify({"error": "Unauthorized Access"}), 401)
-"""
+	return make_response(jsonify({"error": "Unauthorized Access."}), 401)
+
+@auth.verify_password
+def verify_password(username_or_token, password):
+	user_id = User.verify_auth_token(username_or_token)
+	if not user_id:
+		try:
+			user = User.Query.get(username=username_or_token)
+			if not user.verify_password(password):
+				return False
+		except QueryResourceDoesNotExist:
+			return False
+		g.user = user
+		return True
+	g.user = User.Query.get(user_id=user_id)
+	print g.user
+	return True
+
 
 @app.route("/")
 def index():
-	abort(401, "Invalid permissions.")
+	abort(405)
 
 
 @app.route("/favor8/api/v1.0/ver-codes/generate", methods=["POST"])
@@ -142,6 +157,14 @@ def api_vercodes_verify():
 	return jsonify({"match":True}), 200
 
 
+@app.route("/favor8/api/v1.0/get_token", methods=["GET"])
+@auth.login_required
+def get_auth_token():
+	''' Takes in username & password to return an auth_token '''
+	token = g.user.generate_auth_token()
+	return jsonify({"auth_token": token.decode('ascii')})
+
+
 @app.route("/favor8/api/v1.0/users/create", methods=["POST"])
 def api_users_create():
 	""" 
@@ -169,8 +192,8 @@ def api_users_create():
 	
 	try:
 		new_user_id = User.Query.all().count() + 1
-		auth_token = generate_auth_token(new_user_id)
-		user = User(username=username, auth_token=auth_token, user_id=new_user_id)
+		user = User(username=username, user_id=new_user_id)
+		user.auth_token = user.generate_auth_token()
 		user.password = user.hash_password(password)
 		user.save()
 	except Exception as e:
@@ -232,7 +255,7 @@ def api_user_login():
 	if not user.verify_password(password):
 		abort(401, "Incorrect password.")
 
-	auth_token = generate_auth_token(user.user_id)
+	auth_token = user.generate_auth_token()
 
 	try:
 		user.auth_token = auth_token
@@ -254,34 +277,31 @@ def api_user_login():
 
 
 @app.route("/favor8/api/v1.0/users/show/<int:user_id>", methods=["GET"])
+@auth.login_required
 def api_show_user(user_id):
 	""" 
 	  Returns a user's data.
 	  Resource URL: //favor8/api/v1.0/users/show
 	  Type: GET
-	  Requires Authentication? No
+	  Requires Authentication? Yes
 	  Parameters:
-	   user_id (required): user ID of user. Numeric.
-	   auth_token (required): an active authorization token for the authenticating user. String.
+	   None
 	  Example response:
 	   {"user_id": 133, "username": "johnny" "name": "Johnny Cash", "phone": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
 	    "accounts":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}
 	"""
-	if not request.json or not dict_contains_fields(request.json, ["auth_token"]):
-		abort(400, "Invalid parameters.")
 
-	auth_token = request.json["auth_token"]
-	# TODO: validate auth_token properly
-
-	auth_user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
-	if auth_user.auth_token != auth_token:
-		abort(401, "Invalid auth token.")
+	auth_user = g.user
 
 	return_friends = True
 	if user_id != auth_user.user_id: # if card data of another user is being requested
 		return_friends = False
-		friends = auth_user.friends
-		if user_id not in auth_user.friends: # permission check
+		# permission check
+		try:
+			friends = auth_user.friends
+			if user_id not in auth_user.friends: 
+				abort(400, "Don't have permission to access this user's data.")
+		except Exception as e:
 			abort(400, "Don't have permission to access this user's data.")
 
 	user = None
@@ -294,6 +314,7 @@ def api_show_user(user_id):
 
 
 @app.route("/favor8/api/v1.0/users/update", methods=["POST"])
+@auth.login_required
 def api_update_user():
 	""" 
 	  Update authenticating user's data.
@@ -301,7 +322,6 @@ def api_update_user():
 	  Type: POST
 	  Requires Authentication? Yes
 	  Parameters:
-	   auth_token (required): an active authorization token for this user. String.
 	   data: A dictionary containing user data.
 	   	profile_img: A base64-encoded image representing user's profile picture. String.
 	   	name: The full name of the user. String. E.g. Johnny Cash
@@ -313,22 +333,13 @@ def api_update_user():
 	   {"error": "Some of the data could not be saved.", "user": {"user_id": 5, "username": "johnny" "name": "Johnny Cash", "phone": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
 	    "social_links":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}}
 	"""
-	if not request.json or not dict_contains_fields(request.json, ["data", "auth_token"]):
+	if not request.json or not "data" in request.json:
 		abort(400, "Missing required parameters.")
 
-	auth_token = request.json["auth_token"]
 	data = request.json["data"]
-	
-	user = None
-	try:
-		user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
-	except:
-		abort(400, "User not found")
-
-	if user.auth_token != auth_token:
-		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
-	
+	user = g.user
 	error = ""
+
 
 	if "name" in data:
 		name = data["name"]
@@ -389,6 +400,7 @@ def api_update_user():
 
 
 @app.route("/favor8/api/v1.0/users/delete", methods=["POST"])
+@auth.login_required
 def api_delete_user():
 	"""
 	  Delete the authenticating user.
@@ -396,24 +408,12 @@ def api_delete_user():
 	  Type: POST
 	  Requires Authentication? Yes
 	  Parameters:
-	   auth_token (required): an active authorization token for this user. String.
+	   None
 	  Example response:
 	   {"success": true}
 	"""
 
-	if not request.json or not dict_contains_fields(request.json, ["auth_token"]):
-		abort(400, "Missing required parameters")
-
-	auth_token = request.json["auth_token"]
-
-	user = None
-	try:
-		user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
-	except:
-		abort(400, "User not found")
-
-	if user.auth_token != auth_token:
-		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
+	user = g.user
 
 	user_id = user.user_id
 	# Remove this user from their friends' friend lists
@@ -443,6 +443,7 @@ def api_delete_user():
 
 
 @app.route("/favor8/api/v1.0/friends/send_request", methods=["POST"])
+@auth.login_required
 def api_send_friend_request():
 	"""
 	Resource URL: //favor8/api/v1.0/friends/send_request
@@ -450,24 +451,19 @@ def api_send_friend_request():
 	Requires Authentication? Yes
 	Parameters
 	 target_user_id: user ID of the user who is being added. E.g. g534fb4fu7
-	 auth_token: A valid authorization token for the authenticating user. String.
 	Example response:
 	 {"pending": true}
 	"""
-	if not request.json or not dict_contains_fields(request.json, ["target_user_id", "auth_token"]):
+	if not request.json or not "target_user_id" in request.json:
 		abort(400, "Missing parameters.")
 
 	target_user_id = request.json["target_user_id"]
-	auth_token = request.json["auth_token"]
 
 	try:
-		user1 = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
+		user1 = g.user
 		user2 = User.Query.get(user_id=target_user_id)
 	except Exception as e:
 		abort(400, "User not found.")
-
-	if user1.auth_token != auth_token:
-		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	try:
 		outgoing = user1.outgoing_requests
@@ -492,6 +488,7 @@ def api_send_friend_request():
 
 
 @app.route("/favor8/api/v1.0/friendships/create", methods=["POST"])
+@auth.login_required
 def api_create_friendship():
 	"""
 	Creates a friendship b/w authenticating user and another user if there is an incoming request.
@@ -500,26 +497,20 @@ def api_create_friendship():
 	Requires Authentication? Yes
 	Parameters
 	 incoming_user_id: user ID of the user who sent a friend request to the authenticating user. E.g. g534fb4fu7
-	 auth_token: A valid authorization token for the authenticating user. String.
 	Example response:
 	{"user_id": 5, "username": "johnny" "name": "Johnny Cash", "phone": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
     "accounts":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}
 	"""
-	if not request.json or not dict_contains_fields(request.json, ["incoming_user_id", "auth_token"]):
+	if not request.json or not "incoming_user_id" in request.json:
 		abort(400, "Missing parameters.")
 
 	incoming_user_id = request.json["incoming_user_id"]
-	auth_token = request.json["auth_token"]
-
 
 	try:
-		user1 = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
+		user1 = g.user
 		user2 = User.Query.get(user_id=incoming_user_id)
 	except Exception as e:
 		abort(400, "User not found.")
-
-	if user1.auth_token != auth_token:
-		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	# Check if there was a corresponding friend request
 	try:
@@ -569,6 +560,7 @@ def api_create_friendship():
 
 
 @app.route("/favor8/api/v1.0/friendships/destroy", methods=["POST"])
+@auth.login_required
 def api_delete_friendship():
 	"""
 	Removes a friendship b/w authenticating user and another user. Returns True if removal succeeded, 
@@ -578,24 +570,19 @@ def api_delete_friendship():
 	Requires Authentication? Yes
 	Parameters
 	 target_user_id: user ID of the user who is to be removed from friend list. E.g. 5433
-	 auth_token: A valid authorization token for the authenticating user. String.
 	Example response:
 	{"success": True, "friends": [4, 1233, 44]}
 	"""
-	if not request.json or not dict_contains_fields(request.json, ["target_user_id", "auth_token"]):
+	if not request.json or not "target_user_id" in request.json:
 		abort(400, "Missing parameters.")
 
 	target_user_id = request.json["target_user_id"]
-	auth_token = request.json["auth_token"]
 
 	try:
-		user1 = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
+		user1 = g.user
 		user2 = User.Query.get(user_id=target_user_id)
 	except Exception as e:
 		abort(400, "User not found.")
-
-	if user1.auth_token != auth_token:
-		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	# Check if this friendship exists
 	try:
@@ -628,30 +615,23 @@ def api_delete_friendship():
 
 
 @app.route("/favor8/api/v1.0/friends/list", methods=["GET"])
+@auth.login_required
 def api_friends_list():
 	"""
 	Returns a list of user objects for authenticating user's friends (favorites).
 	Resource URL: //favor8/api/v1.0/friends/list
 	Type: GET
 	Requires Authentication? Yes
-	Parameters
-	 auth_token: A valid authorization token for the authenticating user. String.
+	Parameters:
+	 None
 	Example response:
 	{"friends": {}, {}, {}}
 	"""
 
-	if not request.json or not dict_contains_fields(request.json, ["auth_token"]):
-		abort(400, "Missing parameters")
-
-	auth_token = request.json["auth_token"]
-
 	try:
-		auth_user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
+		auth_user = g.user
 	except:
 		abort(400, "User not found.")
-
-	if auth_user.auth_token != auth_token:
-		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	user_id = auth_user.user_id
 	friend_ids = friend_list(user_id)
@@ -667,31 +647,23 @@ def api_friends_list():
 
 
 @app.route("/favor8/api/v1.0/friends/ids", methods=["GET"])
+@auth.login_required
 def api_friends_ids():
 	"""
 	Get a list of user IDs for authenticating user's friends (favorites).
 	Resource URL: //favor8/api/v1.0/friends/ids
 	Type: POST
 	Requires Authentication? Yes
-	Parameters
-	 auth_token: A valid authorization token for the authenticating user. String.
+	Parameters:
+	 None
 	Example response:
 	{"friends": [2, 4, 121]}
 	"""
 
-	if not request.json or not dict_contains_fields(request.json, ["auth_token"]):
-		abort(400, "Missing parameters")
-
-	auth_token = request.json["auth_token"]
-	
-
 	try:
-		auth_user = User.Query.get(user_id=decode_id_from_auth_token(auth_token))
+		auth_user = g.user
 	except:
 		abort(400, "User not found.")
-
-	if auth_user.auth_token != auth_token:
-		abort(401, "Invalid auth token.") # TODO: validate auth token more properly
 
 	user_id = auth_user.user_id
 	friend_ids = friend_list(user_id)
@@ -704,8 +676,24 @@ class User(Object):
 	def hash_password(self, password):
 		self.password_hash = pwd_context.encrypt(password)
 		print self.password_hash
+
 	def verify_password(self, password):
 		return pwd_context.verify(password, self.password_hash)
+
+	def generate_auth_token(self, expiration = 500):
+		s = Serializer(app.config["SECRET_KEY"])
+		return s.dumps({"user_id": self.user_id})
+
+	@staticmethod
+	def verify_auth_token(token):
+		s = Serializer(app.config["SECRET_KEY"])
+		try:
+			data = s.loads(token)
+		except SignatureExpired:
+			return None
+		except BadSignature:
+			return None
+		return data["user_id"]
 
 
 class UnverifiedUser(Object):
@@ -726,7 +714,7 @@ def friend_list(user_id):
 
 def user_card(user, return_friends=True):
 	user_card = {}
-	protected_fields = ["objectId", "auth_token", "_created_at", "_updated_at", "password", "incoming_requests", "outgoing_requests"]
+	protected_fields = ["objectId", "auth_token", "_created_at", "_updated_at", "password", "password_hash", "incoming_requests", "outgoing_requests"]
 	if not return_friends: # so we don't return friends if return_friends=False
 		protected_fields.append("friends")
 	for field in user.__dict__:
@@ -739,16 +727,11 @@ def user_card(user, return_friends=True):
 def dict_contains_fields(dict, fields):
 	return all(k in dict for k in fields)
 
-def generate_auth_token(user_id):
-	# TODO: Generate better auth tokens
+def generate_dumb_auth_token(user_id):
 	r = str(random.randint(100000,999999))
 	return "%s-abcdefg%s" % (user_id, r)
 
-
-
-
-def decode_id_from_auth_token(auth_token):
-	# TODO: update for production-ready auth tokens
+def decode_id_from_dumb_auth_token(auth_token):
 	s = ""
 	for char in auth_token:
 		if char != "-":
