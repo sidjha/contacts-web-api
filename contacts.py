@@ -18,10 +18,6 @@ app.config["DEBUG"] = True
 register(app.config["PARSE_APP_ID"], app.config["PARSE_RESTAPI_KEY"])
 
 
-@app.route("/")
-def index():
-	abort(401, "Invalid permissions.")
-
 @app.errorhandler(400)
 def bad_request(error):
 	return make_response(jsonify({"error": error.description}), 400)
@@ -43,22 +39,26 @@ def internal_server(error):
 	return make_response(jsonify({"error": error.description}), 500)
 
 
+@app.route("/")
+def index():
+	abort(401, "Invalid permissions.")
 
 
-"""
-  Resource URL: https://favor8api.herokuapp.com/favor8/api/v1.0/ver-codes/generate
-  Type: POST
-  Requires Authentication? No
-  Response formats: JSON
-  Parameters
-   phone (required): The phone number to verify. e.g. +14161234567
-  Example request:
-   POST https://favor8api.herokuapp.com/favor8/api/v1.0/ver-codes/generate?phone=+14161234567
-  Example response:
-   {"code": "444213", "phone":"+14161234567"}
-"""
 @app.route("/favor8/api/v1.0/ver-codes/generate", methods=["POST"])
 def api_vercodes_generate():
+	"""
+	  Resource URL: https://favor8api.herokuapp.com/favor8/api/v1.0/ver-codes/generate
+	  Type: POST
+	  Requires Authentication? No
+	  Response formats: JSON
+	  Parameters
+	   phone (required): The phone number to verify. e.g. +14161234567
+	  Example request:
+	   POST https://favor8api.herokuapp.com/favor8/api/v1.0/ver-codes/generate?phone=+14161234567
+	  Example response:
+	   {"code": "444213", "phone":"+14161234567"}
+	"""
+
 	if not request.json or not "phone" in request.json:
 		abort(400, "Missing parameter.")
 	
@@ -97,18 +97,19 @@ def api_vercodes_generate():
 		abort(500, errmsg)
 
 
-"""
-  Resource URL: https://favor8api.herokuapp.com/favor8/api/v1.0/ver-codes/verify
-  Type: GET
-  Requires Authentication? No
-  Parameters
-   code (required): The code to verify. e.g. 434512
-   phone (required): The phone number associated with the code e.g. +14161234567
-  Example response:
-   {"match": true}
-"""
 @app.route("/favor8/api/v1.0/ver-codes/verify", methods=["POST"])
 def api_vercodes_verify():
+	"""
+	  Resource URL: https://favor8api.herokuapp.com/favor8/api/v1.0/ver-codes/verify
+	  Type: GET
+	  Requires Authentication? No
+	  Parameters
+	   code (required): The code to verify. e.g. 434512
+	   phone (required): The phone number associated with the code e.g. +14161234567
+	  Example response:
+	   {"match": true}
+	"""
+
 	if not request.json or not dict_contains_fields(request.json, ["code", "phone"]):
 		errmsg = "Missing parameters."
 		print_error(errmsg)
@@ -131,18 +132,19 @@ def api_vercodes_verify():
 	return jsonify({"match":True}), 200
 
 
-""" 
-  Resource URL: //favor8/api/v1.0/users/create
-  Type: POST
-  Requires Authentication? No
-  Parameters:
-   username (required): username, can be alphanumeric, max 20 characters. String.
-   password (required): a password, can be alphanumeric and contain special characters. String.
-  Example response:
-   {"user_id": "2", "auth_token": "avsdf232332we32r32r!2323223"}
-"""
 @app.route("/favor8/api/v1.0/users/create", methods=["POST"])
 def api_users_create():
+	""" 
+	  Resource URL: //favor8/api/v1.0/users/create
+	  Type: POST
+	  Requires Authentication? No
+	  Parameters:
+	   username (required): username, can be alphanumeric, max 20 characters. String.
+	   password (required): a password, can be alphanumeric and contain special characters. String.
+	  Example response:
+	   {"user_id": "2", "auth_token": "avsdf232332we32r32r!2323223"}
+	"""
+
 	if not request.json or not dict_contains_fields(request.json, ["username", "password"]):
 		abort(400, "Missing parameters.")
 	username = request.json["username"]
@@ -177,19 +179,20 @@ def api_users_create():
 		pass
 	return jsonify({"user_id":user.user_id, "auth_token":user.auth_token}), 200
 
-""" 
-  Resource URL: //favor8/api/v1.0/users/login-fb
-  Type: POST
-  Requires Authentication? No
-  Parameters:
-   fb-token (required): The FB auth token, can be alphanumeric, max 20 characters. String. e.g. johnnycash
-   email address (required): Email address associated with facebook account. String. e.g. johnnycash@example.com
-   fb-id (required): The facebook ID of the person. String. e.g. 166344
-  Example response:
-   {"name": "Johnny Cash", "username": "johnny", "auth_token": "avsdf232332we32r32r!2323223"}
-"""
+
 @app.route("/favor8/api/v1.0/users/login-via-fb", methods=["POST"])
 def api_login_via_fb():
+	""" 
+	  Resource URL: //favor8/api/v1.0/users/login-fb
+	  Type: POST
+	  Requires Authentication? No
+	  Parameters:
+	   fb-token (required): The FB auth token, can be alphanumeric, max 20 characters. String. e.g. johnnycash
+	   email address (required): Email address associated with facebook account. String. e.g. johnnycash@example.com
+	   fb-id (required): The facebook ID of the person. String. e.g. 166344
+	  Example response:
+	   {"name": "Johnny Cash", "username": "johnny", "auth_token": "avsdf232332we32r32r!2323223"}
+	"""
 	pass
 
 
