@@ -501,6 +501,7 @@ def api_create_friendship():
 	{"user_id": 5, "username": "johnny" "name": "Johnny Cash", "phone": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
     "accounts":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}
 	"""
+
 	if not request.json or not "incoming_user_id" in request.json:
 		abort(400, "Missing parameters.")
 
@@ -607,7 +608,7 @@ def api_delete_friendship():
 		user1.save()
 		user2.save()
 		# TODO: send event to user2 and add user 1's card to their stack
-		return jsonify({"success": True, "friends": friend_list(user1)}), 200
+		return jsonify({"success": True, "friends": friend_list(user1.user_id)}), 200
 	except Exception as e:
 		error = "Something went wrong. User could not be removed from friends."
 		print_error(error)

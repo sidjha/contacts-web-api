@@ -6,7 +6,6 @@ def new_user_signed_up(user):
 	u = extract_basic_info(user)
 	text_body = "%s (user id: %s) signed up via %s method. Full name: %s" % (u["username"], u["user_id"], u["via"], u["real_name"])
 	try:
-		#import pdb; pdb.set_trace()
 		subject = "Favor8 Analytics: New User signed up: %s" % u["username"]
 		return send_mail(subject, text_body)
 	except:
