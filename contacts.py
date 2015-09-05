@@ -183,6 +183,9 @@ def api_users_create():
 	username = request.json["username"]
 	password = request.json["password"]
 
+	if username.strip() == "" or password.strip() == "":
+		abort(400, "Invalid parameters.")
+
 	try:
 		User.Query.get(username=username)
 		print_error("User already exists")
@@ -244,6 +247,9 @@ def api_user_login():
 		abort(400, "Missing parameters.")
 	username = request.json["username"]
 	password = request.json["password"]
+	
+	if username.strip() == "" or password.strip() == "":
+		abort(400, "Invalid parameters.")
 
 	user = None
 	try:
