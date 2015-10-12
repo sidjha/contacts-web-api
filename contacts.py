@@ -174,16 +174,18 @@ def api_users_create():
 	  Parameters:
 	   username (required): username, can be alphanumeric, max 20 characters. String.
 	   password (required): a password, can be alphanumeric and contain special characters. String.
+	   name (required): full name of user. String.
 	  Example response:
 	   {"user_id": "2", "auth_token": "avsdf232332we32r32r!2323223"}
 	"""
 
-	if not request.json or not dict_contains_fields(request.json, ["username", "password"]):
+	if not request.json or not dict_contains_fields(request.json, ["username", "password", "name"]):
 		abort(400, "Missing parameters.")
 	username = request.json["username"]
 	password = request.json["password"]
+	name = request.json["name"]
 
-	if username.strip() == "" or password.strip() == "":
+	if username.strip() == "" or password.strip() == "" or name.strip() == "":
 		abort(400, "Invalid parameters.")
 
 	try:
@@ -195,7 +197,7 @@ def api_users_create():
 	
 	try:
 		new_user_id = User.Query.all().count() + 1
-		user = User(username=username, user_id=new_user_id)
+		user = User(username=username, user_id=new_user_id, name=name)
 		user.auth_token = user.generate_auth_token()
 		user.password = user.hash_password(password)
 		user.save()
@@ -339,6 +341,7 @@ def api_update_user():
 	   {"error": "Some of the data could not be saved.", "user": {"user_id": 5, "username": "johnny" "name": "Johnny Cash", "phone": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
 	    "social_links":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}}
 	"""
+	#import pdb; pdb.set_trace()
 	if not request.json or not "data" in request.json:
 		abort(400, "Missing required parameters.")
 
@@ -351,7 +354,9 @@ def api_update_user():
 		name = data["name"]
 		user.name = name
 	if "profile_img" in data:
-		profile_img_base64 = data["profile_img"]
+		#profile_img_base64 = data["profile_img"]
+		profile_img = data["profile_img"]
+		user.profile_img = profile_img
 		"""
 			img_base64_data = re.search("base64,(.*)", profile_img_base64)
 			decoded_img = img_base64_data.group(1)
@@ -456,41 +461,68 @@ def api_send_friend_request():
 	Type: POST
 	Requires Authentication? Yes
 	Parameters
-	 target_user_id: user ID of the user who is being added. E.g. g534fb4fu7
+	 target_username username of the user who is being added. E.g. beyonce
 	Example response:
 	 {"pending": true}
 	"""
-	if not request.json or not "target_user_id" in request.json:
+	if not request.json or not "target_username" in request.json:
 		abort(400, "Missing parameters.")
 
-	target_user_id = request.json["target_user_id"]
+	target_username = request.json["target_username"]
 
 	try:
 		user1 = g.user
-		user2 = User.Query.get(user_id=target_user_id)
+		user2 = User.Query.get(username=target_username)
 	except Exception as e:
 		abort(400, "User not found.")
 
+	# TODO: need to check whether they are already friends.
+
 	try:
 		outgoing = user1.outgoing_requests
-		outgoing.append(user2.user_id)
+		outgoing.append(user2.username)
 		user1.outgoing_requests = outgoing
 	except:
-		user1.outgoing_requests = [user2.user_id]
+		user1.outgoing_requests = [user2.username]
 
 	try:
 		incoming = user2.incoming_requests
-		incoming.append(user1.user_id)
+		incoming.append(user1.username)
 		user2.incoming_requests = incoming
 	except:
-		user2.incoming_requests = [user1.user_id]
+		user2.incoming_requests = [user1.username]
 
 	try:
 		user1.save()
 		user2.save()
-		return jsonify({"pending": True, "user1": user1.user_id, "user2": user2.user_id}), 200
+		return jsonify({"pending": True, "user1": user1.username, "user2": user2.username}), 200
 	except:
 		abort(500, "Friend request could not be sent")
+
+
+@app.route("/favor8/api/v1.0/friends/incoming_requests", methods=["GET"])
+@auth.login_required
+def api_incoming_requests():
+	"""
+	Resource URL: //favor8/api/v1.0/friends/incoming_requests
+	Type: GET
+	Requires Authentication? Yes
+	Parameters
+	 None
+	Example response:
+	 {"incoming_requests": ["beyonce", "bono", "siddharth"]}
+	"""
+	auth_user = g.user
+
+	try:
+		incoming_requests = auth_user.incoming_requests # TODO: there is an error here: https://www.dropbox.com/s/g7tvorvc55za33z/Screenshot%202015-10-11%2020.58.24.png?dl=0
+	except AttributeError as e:
+		incoming_requests = []
+
+	try:
+		return jsonify({"incoming_requests": incoming_requests}), 200
+	except:
+		abort(500, "Could not retrieve friend requests")
 
 
 @app.route("/favor8/api/v1.0/friendships/create", methods=["POST"])
@@ -502,26 +534,26 @@ def api_create_friendship():
 	Type: POST
 	Requires Authentication? Yes
 	Parameters
-	 incoming_user_id: user ID of the user who sent a friend request to the authenticating user. E.g. g534fb4fu7
+	 incoming_username: username of the user who sent a friend request to the authenticating user. E.g. beyonce
 	Example response:
 	{"user_id": 5, "username": "johnny" "name": "Johnny Cash", "phone": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
     "accounts":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}
 	"""
 
-	if not request.json or not "incoming_user_id" in request.json:
+	if not request.json or not "incoming_username" in request.json:
 		abort(400, "Missing parameters.")
 
-	incoming_user_id = request.json["incoming_user_id"]
+	incoming_username = request.json["incoming_username"]
 
 	try:
 		user1 = g.user
-		user2 = User.Query.get(user_id=incoming_user_id)
+		user2 = User.Query.get(username=incoming_username)
 	except Exception as e:
 		abort(400, "User not found.")
 
 	# Check if there was a corresponding friend request
 	try:
-		if user2.user_id not in user1.incoming_requests:
+		if user2.username not in user1.incoming_requests:
 			abort(400, "Invalid parameters.")
 	# NOTE: this AttributeError catch isn't necessary is User table is already set up with these fields
 	except AttributeError: # will be thrown when authenticating user has never had an incoming request
@@ -539,10 +571,10 @@ def api_create_friendship():
 	try:
 		# Remove incoming user from authenticating user's incoming requests
 		user1_incoming = user1.incoming_requests
-		user1_incoming.remove(user2.user_id)
+		user1_incoming.remove(user2.username)
 		# Remove authenticating user from incoming user's outgoing requests
 		user2_outgoing = user2.outgoing_requests
-		user2_outgoing.remove(user1.user_id)
+		user2_outgoing.remove(user1.username)
 	except:
 		abort(400, "Friend request has expired.")
 
@@ -576,18 +608,18 @@ def api_delete_friendship():
 	Type: POST
 	Requires Authentication? Yes
 	Parameters
-	 target_user_id: user ID of the user who is to be removed from friend list. E.g. 5433
+	 target_username: username of the user who is to be removed from friend list. E.g. 5433
 	Example response:
 	{"success": True, "friends": [4, 1233, 44]}
 	"""
-	if not request.json or not "target_user_id" in request.json:
+	if not request.json or not "target_username" in request.json:
 		abort(400, "Missing parameters.")
 
-	target_user_id = request.json["target_user_id"]
+	target_username = request.json["target_username"]
 
 	try:
 		user1 = g.user
-		user2 = User.Query.get(user_id=target_user_id)
+		user2 = User.Query.get(username=target_username)
 	except Exception as e:
 		abort(400, "User not found.")
 
@@ -687,7 +719,7 @@ class User(Object):
 	def verify_password(self, password):
 		return pwd_context.verify(password, self.password_hash)
 
-	def generate_auth_token(self, expiration = 500):
+	def generate_auth_token(self, expiration = 5000):
 		s = Serializer(app.config["SECRET_KEY"])
 		return s.dumps({"user_id": self.user_id})
 
@@ -729,6 +761,7 @@ def user_card(user, return_friends=True):
 			pass
 		else:
 			user_card[field] = user.__dict__[field]
+	print user_card
 	return user_card
 
 def dict_contains_fields(dict, fields):

@@ -33,7 +33,7 @@ def send_mail(subject, text_body, tag="favor8"):
 	                 text_body = text_body,
 	                 tag = tag)
 
-	message.send()
+	#message.send()
 
 def extract_basic_info(user):
 	u = {}
