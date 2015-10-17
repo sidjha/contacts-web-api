@@ -233,6 +233,41 @@ def api_login_via_fb():
 	pass
 
 
+@app.route("/favor8/api/v1.0/users/change-password", methods=["POST"])
+@auth.login_required
+def api_change_password():
+	""" 
+	  Resource URL: //favor8/api/v1.0/users/change-password
+	  Type: POST
+	  Requires Authentication? Yes
+	  Parameters:
+	  	old_password (required): the old password. String.
+	  	new_password (required): the new password. String.
+	  Example response:
+	   {}
+	"""
+
+	if not request.json or not dict_contains_fields(request.json, ["old_password", "new_password"]):
+		abort(400, "Invalid parameters")
+
+	old_password = request.json["old_password"]
+	new_password = request.json["new_password"]
+
+	# check if old_password matches actual old password
+	auth_user = g.user
+
+	if not auth_user.verify_password(old_password):
+		abort(400, "Invalid parameters")
+
+	try:
+		auth_user.password = auth_user.hash_password(new_password)
+		auth_user.save()
+	except Exception as e:
+		abort(500, "New password could not be saved")
+
+	return jsonify({"success": "True"}), 200
+
+
 @app.route("/favor8/api/v1.0/users/login", methods=["POST"])
 def api_user_login():
 	""" 
