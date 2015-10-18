@@ -568,6 +568,51 @@ def api_incoming_requests():
 		abort(500, "Could not retrieve friend requests")
 
 
+@app.route("/favor8/api/v1.0/friends/destroy_incoming_request", methods=["POST"])
+@auth.login_required
+def api_destroy_incoming_request():
+	"""
+	Resource URL: //favor8/api/v1.0/friends/destroy_incoming_request
+	Type: POST
+	Requires Authentication? Yes
+	Parameters
+	 target_username username of the request to be removed/ignored. E.g. beyonce
+	Example response:
+	 {"success": true}
+	"""
+	if not request.json or not "target_username" in request.json:
+		abort(400, "Missing parameters.")
+
+	target_username = request.json["target_username"]
+
+	try:
+		user1 = g.user
+		user2 = User.Query.get(username=target_username)
+	except Exception as e:
+		abort(404, "User not found.")
+
+	try:
+		outgoing = user2.outgoing_requests
+		outgoing.remove(user1.username)
+		user2.outgoing_requests = outgoing
+	except Exception as e:
+		abort(400, "Invalid request.")
+
+	try:
+		incoming = user1.incoming_requests
+		incoming.remove(user2.username)
+		user1.incoming_requests = incoming
+	except Exception as e:
+		abort(400, "Invalid request.")
+
+	try:
+		user1.save()
+		user2.save()
+		return jsonify({"success": True, "user1": user1.username, "user2": user2.username}), 200
+	except:
+		abort(500, "Friend request could not be ignored.")
+
+
 @app.route("/favor8/api/v1.0/friendships/create", methods=["POST"])
 @auth.login_required
 def api_create_friendship():
