@@ -509,9 +509,17 @@ def api_send_friend_request():
 		user1 = g.user
 		user2 = User.Query.get(username=target_username)
 	except Exception as e:
-		abort(400, "User not found.")
+		abort(404, "User not found.")
 
 	# TODO: need to check whether they are already friends.
+	if (user1.username == user2.username):
+		abort(400, "Cannot add yourself.")
+
+	if (user2.user_id in user1.friends):
+		abort(400, "User already a friend.")
+
+	if (user2.username in user1.outgoing_requests):
+		abort(400, "Friend request already sent.")
 
 	try:
 		outgoing = user1.outgoing_requests
