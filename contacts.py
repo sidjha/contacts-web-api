@@ -200,6 +200,10 @@ def api_users_create():
 		user = User(username=username, user_id=new_user_id, name=name)
 		user.auth_token = user.generate_auth_token()
 		user.password = user.hash_password(password)
+		user.friends = []
+		user.incoming_requests = []
+		user.outgoing_requests = []
+		user.social_links = {}
 		user.save()
 	except Exception as e:
 		errmsg = "New user could not be saved."
