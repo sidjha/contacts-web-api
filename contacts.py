@@ -811,8 +811,8 @@ class User(Object):
 	def verify_password(self, password):
 		return pwd_context.verify(password, self.password_hash)
 
-	def generate_auth_token(self, expiration = 5000):
-		s = Serializer(app.config["SECRET_KEY"])
+	def generate_auth_token(self, expiration = 2592000):
+		s = Serializer(app.config["SECRET_KEY"], expires_in = expiration)
 		return s.dumps({"user_id": self.user_id})
 
 	@staticmethod
