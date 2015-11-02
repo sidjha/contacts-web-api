@@ -376,6 +376,7 @@ def api_update_user():
 	   	status: A short status message. String. E.g. Just arrived in Mumbai.
 	   	email: An email. String.
 	   	phone: Phone #. String.
+	   	color: hex representation of chosen card background color. String.
 	  Example response:
 	   {"error": "Some of the data could not be saved.", "user": {"user_id": 5, "username": "johnny" "name": "Johnny Cash", "phone": "+14159989989", "profile_img": "http://s3.amazonaws.com/23e23rf3e3f/h2.jpg", 
 	    "social_links":{"facebook": "zuck", "whatsapp": "+14159989989"}, "status":"A short status message."}}
@@ -440,6 +441,11 @@ def api_update_user():
 		phone = data["phone"]
 		user.phone = phone
 		# TODO: add phone verification
+
+	if "color" in data:
+		color = data["color"]
+		user.color = color
+
 	try:
 		user.save()
 		return jsonify({"errors": error, "user": user_card(user, return_friends=False)}), 200
