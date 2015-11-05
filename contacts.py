@@ -933,6 +933,7 @@ def generate_code(phone_num):
 	code = str(random.randint(100000,999999))
 
 	# Temp hack to forward to sid@mesh8.co
+	"""
 	from postmark import PMMail
 	message = PMMail(api_key = app.config["POSTMARK_API_TOKEN"],
 	                 subject = "Verification Code from Favor8",
@@ -942,6 +943,7 @@ def generate_code(phone_num):
 	                 tag = "favor8")
 
 	message.send()
+	"""
 	return code
 
 def send_sms(code, phone_num):
