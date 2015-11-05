@@ -945,13 +945,13 @@ def generate_code(phone_num):
 	return code
 
 def send_sms(code, phone_num):
-	sms_body = "Hey there, your verification code is %s" % code
+	sms_body = "Hey there, your Favor8 verification code is %s" % code
 	sent = False
 
 	print_debug(sms_body)
 	try:
-		client = TwilioRestClient(app.config["TWILIO_TEST_ACCOUNT_SID"], app.config["TWILIO_TEST_AUTH_TOKEN"])
-		message = client.messages.create(body=sms_body,to=phone_num,from_=app.config["TWILIO_TEST_FROM_NUM"])
+		client = TwilioRestClient(app.config["TWILIO_ACCOUNT_SID"], app.config["TWILIO_AUTH_TOKEN"])
+		message = client.messages.create(body=sms_body,to=phone_num,from_=app.config["TWILIO_FROM_NUM"])
 		return True
 
 	except twilio.TwilioRestException as e:
