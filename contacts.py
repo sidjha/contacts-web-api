@@ -77,17 +77,24 @@ def api_vercodes_generate():
 	  Requires Authentication? No
 	  Response formats: JSON
 	  Parameters
-	   phone (required): The phone number to verify. e.g. +14161234567
+	   username (required): The username for whom to send an SMS verification for
 	  Example request:
-	   POST https://favor8api.herokuapp.com/favor8/api/v1.0/ver-codes/generate?phone=+14161234567
+	   POST https://favor8api.herokuapp.com/favor8/api/v1.0/ver-codes/generate?username=sidjha
 	  Example response:
-	   {"code": "444213", "phone":"+14161234567"}
+	   {"sent": True}
 	"""
 
-	if not request.json or not "phone" in request.json:
+	if not request.json or not "username" in request.json:
 		abort(400, "Missing parameter.")
 	
-	phone = request.json["phone"]
+	username = request.json["username"]
+
+	try:
+		user = User.Query.get(username=username)
+		phone = user.phone
+	except QueryResourceDoesNotExist as e:
+		abort(404, "User not found")
+
 	try:
 		code = generate_code(phone)
 	except:
@@ -103,22 +110,20 @@ def api_vercodes_generate():
 		unverified_user.save()
 		print_debug("Saved phone number successfully.")
 	except QueryResourceDoesNotExist:
-		unverified_user = UnverifiedUser(phone=phone, ver_code=code)
+		unverified_user = UnverifiedUser(phone=phone, ver_code=code, username=username)
 	
 	try:
 		unverified_user.save()
 	except Exception as e:
-		errmsg = "There was a problem saving unverified user to DB"
-		print_error(errmsg)
+		errmsg = "There was a problem saving verification code to DB"
 		abort(500, errmsg)
 
 	sent = send_sms(code, phone)
 
 	if sent == True:
-		return jsonify({"code": code, "phone": phone}), 200
+		return jsonify({"sent": True}), 200
 	else:
 		errmsg = "Verification SMS could not be sent."
-		print_error(errmsg)
 		abort(500, errmsg)
 
 
@@ -130,31 +135,77 @@ def api_vercodes_verify():
 	  Requires Authentication? No
 	  Parameters
 	   code (required): The code to verify. e.g. 434512
-	   phone (required): The phone number associated with the code e.g. +14161234567
+	   username (required): The username associated with the verification code. e.g. sidjha
 	  Example response:
 	   {"match": true}
 	"""
 
-	if not request.json or not dict_contains_fields(request.json, ["code", "phone"]):
+	if not request.json or not dict_contains_fields(request.json, ["code", "username"]):
 		errmsg = "Missing parameters."
-		print_error(errmsg)
 		abort(400, errmsg)
 
 	unverified_user = None
 	try:
-		unverified_user = UnverifiedUser.Query.get(phone=request.json["phone"])
+		unverified_user = UnverifiedUser.Query.get(username=request.json["username"])
 		actual_code = unverified_user.ver_code
 		if actual_code != request.json["code"]:
 			errmsg = "Codes don't match."
-			print_debug(errmsg)
 			abort(400, errmsg)
 	except QueryResourceDoesNotExist:
 		errmsg = "Code has expired"
-		print_debug(errmsg)
 		abort(404, errmsg)
 
-	unverified_user.delete()
 	return jsonify({"match":True}), 200
+
+
+@app.route("/favor8/api/v1.0/users/reset-password", methods=["POST"])
+def api_reset_password():
+	""" 
+	  Resource URL: //favor8/api/v1.0/users/change-password
+	  Type: POST
+	  Requires Authentication? Yes
+	  Parameters:
+	  	code (required): The verification code. String.
+	  	new_password (required): the new password. String.
+	  	username (required): User whose password is to be changed. String.
+	"""
+
+	if not request.json or not dict_contains_fields(request.json, ["code", "new_password", "username"]):
+		abort(400, "Invalid parameters")
+
+	code = request.json["code"]
+	new_password = request.json["new_password"]
+	username = request.json["username"]
+
+	try:
+		user = User.Query.get(username=username)
+	except QueryResourceDoesNotExist as e:
+		abort(404, "User not found")
+
+	try:
+		unverified_user = UnverifiedUser.Query.get(username=username)
+	except QueryResourceDoesNotExist as e:
+		abort(400, "Verification Code has expired")
+
+	# For security measure, check verification code again
+	actual_code = unverified_user.ver_code
+	if actual_code != code:
+		errmsg = "Codes don't match."
+		abort(400, errmsg)
+
+	user.password = user.hash_password(new_password)
+
+	try:
+		user.save()
+	except Exception as e:
+		abort(500, "New password could not be saved")
+
+	try:
+		unverified_user.delete()
+	except Exception as e:
+		print_error("Unverified user couldn't be removed")
+
+	return jsonify({"success": "True"}), 200
 
 
 @app.route("/favor8/api/v1.0/get_token", methods=["GET"])
